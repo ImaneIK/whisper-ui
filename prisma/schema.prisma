@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Company {
+  id            String    @id @default(cuid())
+  name          String
+  slug          String    @unique
+  description   String?
+  logo          String?
+  website       String?
+  city          String?
+  country       String    @default("Morocco")
+  industry      String?
+  size          String?   // e.g. "50-200", "200-500", "500+"
+  
+  // Ratings cache (for quick display)
+  averageRating Float     @default(0)
+  totalReviews  Int       @default(0)
+
+  // Timestamps
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  reviews       Review[]
+
+  @@map("companies")
+}
+
+
+model Review {
+  id          String   @id @default(cuid())
+  companyId   String
+  // ... other fields
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company  @relation(fields: [companyId], references: [id])
+  // other relations...
+}
+
