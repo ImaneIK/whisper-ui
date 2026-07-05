@@ -4,46 +4,19 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Check, Star } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ShieldCheck } from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";
-import { SiteShell } from "../../../components/layout/SiteShell";
-import { Card } from "../../../components/ui/card";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
-import { Label } from "../../../components/ui/label";
-import { Textarea } from "../../../components/ui/textarea";
-import { api } from "../../../lib/api";
-import { cn } from "../../../lib/utils";
+import { cn } from "@/app/lib/utils";
+import { api } from "@/app/lib/api";
+import { SiteShell } from "@/app/components/layout/SiteShell";
+import { Card } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
 
-// ─── Schema & Types ──────────────────────────────────────────────────────────
-const schema = z.object({
-  rating: z.number().min(1).max(5),
-  title: z.string().trim().min(5).max(120),
-  role: z.string().trim().max(60).optional().default(""),
-  pros: z.string().trim().min(10).max(800),
-  cons: z.string().trim().min(10).max(800),
-  advice: z.string().trim().max(500).optional().default(""),
-  workLife: z.number().min(1).max(5),
-  salary: z.number().min(1).max(5),
-  management: z.number().min(1).max(5),
-  growth: z.number().min(1).max(5),
-  atmosphere: z.number().min(1).max(5),
-  jobType: z.string().optional(),
-  seniority: z.string().optional(),
-  tenure: z.string().optional(),
-  employmentStatus: z.string().optional(),
-  city: z.string().optional(),
-});
 
-type FormData = z.infer<typeof schema> & {
-  companyId: string;
-  companyName: string;
-};
 
-const STEPS = ["Aperçu", "Poste", "Notes", "Points forts/faibles", "Conclusion"];
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-// Moroccan cities and options (from second version)
 const MOROCCAN_CITIES = [
   "Casablanca", "Rabat", "Marrakech", "Fès", "Tanger",
   "Agadir", "Meknès", "Oujda", "Kenitra", "Tétouan",
@@ -51,104 +24,514 @@ const MOROCCAN_CITIES = [
 ];
 
 const PROS_OPTIONS = [
-  { value: "competitive-salary", label: "Salaire compétitif" },
-  { value: "flexible-hours", label: "Horaires flexibles" },
-  { value: "good-team", label: "Bonne ambiance d'équipe" },
+  { value: "competitive-salary",     label: "Salaire compétitif" },
+  { value: "flexible-hours",         label: "Horaires flexibles" },
+  { value: "good-team",              label: "Bonne ambiance d'équipe" },
   { value: "learning-opportunities", label: "Opportunités d'apprentissage" },
-  { value: "job-stability", label: "Stabilité de l'emploi" },
-  { value: "good-management", label: "Bonne direction" },
-  { value: "modern-tools", label: "Outils modernes" },
-  { value: "remote-work", label: "Télétravail possible" },
+  { value: "job-stability",          label: "Stabilité de l'emploi" },
+  { value: "good-management",        label: "Bonne direction" },
+  { value: "modern-tools",           label: "Outils modernes" },
+  { value: "remote-work",            label: "Télétravail possible" },
 ];
 
 const CONS_OPTIONS = [
-  { value: "unpaid-overtime", label: "Heures sup non payées" },
-  { value: "no-career-path", label: "Pas d'évolution de carrière" },
-  { value: "poor-management", label: "Mauvaise gestion" },
-  { value: "toxic-atmosphere", label: "Ambiance toxique" },
-  { value: "late-salaries", label: "Salaires en retard" },
+  { value: "unpaid-overtime",      label: "Heures sup non payées" },
+  { value: "no-career-path",       label: "Pas d'évolution de carrière" },
+  { value: "poor-management",      label: "Mauvaise gestion" },
+  { value: "toxic-atmosphere",     label: "Ambiance toxique" },
+  { value: "late-salaries",        label: "Salaires en retard" },
   { value: "no-work-life-balance", label: "Aucun équilibre vie pro/perso" },
-  { value: "lack-of-recognition", label: "Manque de reconnaissance" },
-  { value: "high-turnover", label: "Fort turnover" },
+  { value: "lack-of-recognition",  label: "Manque de reconnaissance" },
+  { value: "high-turnover",        label: "Fort turnover" },
 ];
+
+const RATING_FIELDS = [
+  { key: "ratingOverall",    label: "Expérience globale" },
+  { key: "ratingWorkLife",   label: "Équilibre vie pro/perso" },
+  { key: "ratingSalary",     label: "Équité salariale" },
+  { key: "ratingManagement", label: "Qualité du management" },
+  { key: "ratingGrowth",     label: "Opportunités de croissance" },
+  { key: "ratingAtmosphere", label: "Ambiance au travail" },
+] as const;
+
+const STEPS = ["Poste", "Notes", "Retours", "Résumé"] as const;
+
+// ─── Zod schema ───────────────────────────────────────────────────────────────
+
+const schema = z.object({
+  companyId:        z.string(),
+  anonId:           z.string(),
+  role:             z.string().trim().max(60).optional().default(""),
+  jobType:          z.enum(["FULL_TIME", "INTERNSHIP", "FREELANCE", "PART_TIME"]),
+  seniority:        z.enum(["JUNIOR", "MID", "SENIOR", "EXECUTIVE"]),
+  tenure:           z.enum(["LESS_THAN_1", "1_3", "3_5", "MORE_THAN_5"]),
+  employmentStatus: z.enum(["CURRENT", "FORMER"]),
+  city:             z.string().min(1),
+  ratingOverall:    z.number().int().min(1).max(5),
+  ratingWorkLife:   z.number().int().min(1).max(5),
+  ratingSalary:     z.number().int().min(1).max(5),
+  ratingManagement: z.number().int().min(1).max(5),
+  ratingGrowth:     z.number().int().min(1).max(5),
+  ratingAtmosphere: z.number().int().min(1).max(5),
+  pros:             z.array(z.string()).min(1).max(5),
+  cons:             z.array(z.string()).min(1).max(5),
+  summary:          z.string().trim().max(300).optional().default(""),
+});
+
+type FormData = Omit<z.infer<typeof schema>, "companyId" | "anonId">;
+
+const INITIAL: FormData = {
+  role:             "",
+  jobType:          "" as FormData["jobType"],
+  seniority:        "" as FormData["seniority"],
+  tenure:           "" as FormData["tenure"],
+  employmentStatus: "" as FormData["employmentStatus"],
+  city:             "",
+  ratingOverall:    0,
+  ratingWorkLife:   0,
+  ratingSalary:     0,
+  ratingManagement: 0,
+  ratingGrowth:     0,
+  ratingAtmosphere: 0,
+  pros:             [],
+  cons:             [],
+  summary:          "",
+};
+
+// ─── Small reusable components ────────────────────────────────────────────────
+
+function StepHeading({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div className="mb-6">
+      <h2 className="font-display text-2xl font-semibold text-foreground leading-tight">{title}</h2>
+      {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
+    </div>
+  );
+}
+
+function PillGroup({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="mb-5">
+      <p className="text-sm font-medium mb-2">{label}</p>
+      <div className="flex flex-wrap gap-2">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            className={cn(
+              "px-4 py-1.5 rounded-full text-sm border transition-all duration-150",
+              value === opt.value
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-background text-foreground border-border hover:border-primary"
+            )}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StarRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const [hovered, setHovered] = useState(0);
+  return (
+    <div className="flex items-center justify-between py-3 border-b border-border last:border-0">
+      <span className="text-sm">{label}</span>
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            type="button"
+            onClick={() => onChange(star)}
+            onMouseEnter={() => setHovered(star)}
+            onMouseLeave={() => setHovered(0)}
+            className="text-xl transition-transform duration-100 hover:scale-110"
+          >
+            <span className={star <= (hovered || value) ? "text-yellow-500" : "text-muted-foreground/30"}>
+              ★
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CheckboxGrid({
+  label,
+  hint,
+  options,
+  selected,
+  onChange,
+  max,
+}: {
+  label: string;
+  hint: string;
+  options: { value: string; label: string }[];
+  selected: string[];
+  onChange: (v: string[]) => void;
+  max: number;
+}) {
+  const toggle = (val: string) => {
+    if (selected.includes(val)) {
+      onChange(selected.filter((v) => v !== val));
+    } else if (selected.length < max) {
+      onChange([...selected, val]);
+    }
+  };
+
+  return (
+    <div className="mb-6">
+      <p className="text-sm font-medium mb-0.5">{label}</p>
+      <p className="text-xs text-muted-foreground mb-3">{hint}</p>
+      <div className="grid grid-cols-2 gap-2">
+        {options.map((opt) => {
+          const checked = selected.includes(opt.value);
+          const disabled = !checked && selected.length >= max;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              disabled={disabled}
+              onClick={() => toggle(opt.value)}
+              className={cn(
+                "flex items-center gap-2 p-2.5 rounded-lg border text-left text-sm transition-all duration-150",
+                checked  && "bg-primary text-primary-foreground border-primary",
+                !checked && !disabled && "bg-background text-foreground border-border hover:border-primary",
+                disabled && "bg-secondary text-muted-foreground border-border cursor-not-allowed opacity-50"
+              )}
+            >
+              <span className={cn(
+                "w-4 h-4 rounded flex-shrink-0 border flex items-center justify-center text-xs",
+                checked ? "bg-primary-foreground border-primary-foreground text-primary" : "border-current"
+              )}>
+                {checked && <Check size={10} />}
+              </span>
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Steps ────────────────────────────────────────────────────────────────────
+
+function Step0Position({
+  data,
+  companyName,
+  update,
+}: {
+  data: FormData;
+  companyName: string;
+  update: (p: Partial<FormData>) => void;
+}) {
+  return (
+    <>
+      <StepHeading
+        title={`Votre poste chez ${companyName}`}
+        subtitle="Ces informations restent anonymes et ne permettent pas de vous identifier."
+      />
+
+      {/* Optional role title */}
+      <div className="mb-5">
+        <p className="text-sm font-medium mb-2">Intitulé du poste <span className="text-muted-foreground font-normal">(facultatif)</span></p>
+        <input
+          type="text"
+          maxLength={60}
+          placeholder="ex : Développeur fullstack, Chargé de clientèle…"
+          value={data.role}
+          onChange={(e) => update({ role: e.target.value })}
+          className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+        />
+      </div>
+
+      <PillGroup
+        label="Type de contrat"
+        value={data.jobType}
+        onChange={(v) => update({ jobType: v as FormData["jobType"] })}
+        options={[
+          { value: "FULL_TIME",  label: "CDI / CDD" },
+          { value: "INTERNSHIP", label: "Stage" },
+          { value: "FREELANCE",  label: "Freelance" },
+          { value: "PART_TIME",  label: "Temps partiel" },
+        ]}
+      />
+
+      <PillGroup
+        label="Niveau"
+        value={data.seniority}
+        onChange={(v) => update({ seniority: v as FormData["seniority"] })}
+        options={[
+          { value: "JUNIOR",    label: "Junior" },
+          { value: "MID",       label: "Confirmé" },
+          { value: "SENIOR",    label: "Senior" },
+          { value: "EXECUTIVE", label: "Cadre / Direction" },
+        ]}
+      />
+
+      <PillGroup
+        label="Durée dans l'entreprise"
+        value={data.tenure}
+        onChange={(v) => update({ tenure: v as FormData["tenure"] })}
+        options={[
+          { value: "LESS_THAN_1", label: "< 1 an" },
+          { value: "1_3",         label: "1 – 3 ans" },
+          { value: "3_5",         label: "3 – 5 ans" },
+          { value: "MORE_THAN_5", label: "+ 5 ans" },
+        ]}
+      />
+
+      <PillGroup
+        label="Statut"
+        value={data.employmentStatus}
+        onChange={(v) => update({ employmentStatus: v as FormData["employmentStatus"] })}
+        options={[
+          { value: "CURRENT", label: "Employé(e) actuel(le)" },
+          { value: "FORMER",  label: "Ancien(ne) employé(e)" },
+        ]}
+      />
+
+      {/* City grid */}
+      <div>
+        <p className="text-sm font-medium mb-2">Ville du poste</p>
+        <div className="grid grid-cols-3 gap-1.5">
+          {MOROCCAN_CITIES.map((city) => (
+            <button
+              key={city}
+              type="button"
+              onClick={() => update({ city })}
+              className={cn(
+                "py-2 px-3 rounded-lg border text-sm transition-all duration-150 truncate",
+                data.city === city
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background text-foreground border-border hover:border-primary"
+              )}
+            >
+              {city}
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Step1Ratings({ data, update }: { data: FormData; update: (p: Partial<FormData>) => void }) {
+  return (
+    <>
+      <StepHeading
+        title="Évaluez votre expérience"
+        subtitle="Notez chaque aspect de 1 (très mauvais) à 5 (excellent)."
+      />
+      <div className="rounded-2xl border border-border px-5 py-1">
+        {RATING_FIELDS.map(({ key, label }) => (
+          <StarRow
+            key={key}
+            label={label}
+            value={data[key] as number}
+            onChange={(v) => update({ [key]: v })}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function Step2Tags({ data, update }: { data: FormData; update: (p: Partial<FormData>) => void }) {
+  return (
+    <>
+      <StepHeading
+        title="Points forts & points faibles"
+        subtitle="Sélectionnez ce qui décrit le mieux votre expérience."
+      />
+      <CheckboxGrid
+        label="✓ Ce que l'entreprise fait bien"
+        hint="Jusqu'à 5 choix"
+        options={PROS_OPTIONS}
+        selected={data.pros}
+        onChange={(pros) => update({ pros })}
+        max={5}
+      />
+      <CheckboxGrid
+        label="✗ Ce qui pose problème"
+        hint="Jusqu'à 5 choix"
+        options={CONS_OPTIONS}
+        selected={data.cons}
+        onChange={(cons) => update({ cons })}
+        max={5}
+      />
+    </>
+  );
+}
+
+function Step3Summary({
+  data,
+  companyName,
+  update,
+}: {
+  data: FormData;
+  companyName: string;
+  update: (p: Partial<FormData>) => void;
+}) {
+  const MAX = 300;
+  const remaining = MAX - data.summary.length;
+
+  return (
+    <>
+      <StepHeading
+        title="Un mot pour conclure"
+        subtitle="Facultatif. Que diriez-vous à un ami qui envisage de rejoindre cette entreprise ?"
+      />
+
+      <div className="relative mb-6">
+        <textarea
+          maxLength={MAX}
+          value={data.summary}
+          onChange={(e) => update({ summary: e.target.value })}
+          placeholder="ex : Bonne boîte pour débuter, mais les perspectives d'évolution sont limitées après 2 ans."
+          rows={4}
+          className="w-full px-4 py-3 rounded-xl border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors resize-none"
+        />
+        <span className={cn(
+          "absolute bottom-3 right-3 text-xs",
+          remaining < 50 ? "text-destructive" : "text-muted-foreground"
+        )}>
+          {remaining} car. restants
+        </span>
+      </div>
+
+      {/* Preview card */}
+      <div className="rounded-2xl bg-secondary p-5 mb-4">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">Aperçu de votre avis</p>
+        <p className="text-sm font-semibold mb-0.5">{companyName}</p>
+        <p className="text-xs text-muted-foreground mb-3">
+          {data.city}{data.role ? ` · ${data.role}` : ""} · {data.jobType} · {data.seniority}
+        </p>
+        <div className="flex gap-0.5 mb-3">
+          {[1, 2, 3, 4, 5].map((s) => (
+            <span key={s} className={s <= data.ratingOverall ? "text-yellow-500" : "text-muted-foreground/30"}>★</span>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {data.pros.map((p) => (
+            <span key={p} className="text-xs bg-background text-foreground px-2 py-1 rounded-full border border-border">
+              {PROS_OPTIONS.find((o) => o.value === p)?.label}
+            </span>
+          ))}
+          {data.cons.map((c) => (
+            <span key={c} className="text-xs bg-foreground text-background px-2 py-1 rounded-full">
+              {CONS_OPTIONS.find((o) => o.value === c)?.label}
+            </span>
+          ))}
+        </div>
+        {data.summary && (
+          <p className="text-sm text-muted-foreground mt-3 italic">"{data.summary}"</p>
+        )}
+      </div>
+
+      <div className="flex items-start gap-2 text-xs text-muted-foreground">
+        <ShieldCheck size={14} className="mt-0.5 flex-shrink-0" />
+        <p>Aucun compte créé. Votre avis sera publié anonymement sous 48h après vérification par notre équipe.</p>
+      </div>
+    </>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function NewReviewPage() {
   const { slug } = useParams<{ slug: string }>();
   const router = useRouter();
   const qc = useQueryClient();
 
-  const { data: company } = useQuery({
+  const { data: company, isLoading } = useQuery({
     queryKey: ["company", slug],
     queryFn: () => api.getCompanyBySlug(slug),
   });
 
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState<FormData>({
-    companyId: "",
-    companyName: "",
-    rating: 0,
-    title: "",
-    role: "",
-    pros: "",
-    cons: "",
-    advice: "",
-    workLife: 3,
-    salary: 3,
-    management: 3,
-    growth: 3,
-    atmosphere: 3,
-    jobType: "",
-    seniority: "",
-    tenure: "",
-    employmentStatus: "",
-    city: "",
-  });
+  const [form, setForm] = useState<FormData>(INITIAL);
+  const [submitting, setSubmitting] = useState(false);
 
-  const [selectedPros, setSelectedPros] = useState<string[]>([]);
-  const [selectedCons, setSelectedCons] = useState<string[]>([]);
-
-  const updateForm = (patch: Partial<FormData>) => {
+  const update = (patch: Partial<FormData>) =>
     setForm((prev) => ({ ...prev, ...patch }));
+
+  const canProceed = (): boolean => {
+    if (step === 0)
+      return (
+        !!form.jobType &&
+        !!form.seniority &&
+        !!form.tenure &&
+        !!form.employmentStatus &&
+        !!form.city
+      );
+    if (step === 1)
+      return RATING_FIELDS.every(({ key }) => (form[key] as number) > 0);
+    if (step === 2)
+      return form.pros.length > 0 && form.cons.length > 0;
+    return true; // step 3 (summary) is optional
   };
 
-  const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
-  const back = () => setStep((s) => Math.max(s - 1, 0));
+  const handleSubmit = async () => {
+    if (!company) return;
 
-  const stepValid = () => {
-    if (step === 0) return form.rating >= 1 && form.title.trim().length >= 5;
-    if (step === 1) return !!form.jobType && !!form.seniority && !!form.tenure && !!form.employmentStatus && !!form.city;
-    if (step === 2) return [form.workLife, form.salary, form.management, form.growth, form.atmosphere].every(r => r >= 1);
-    if (step === 3) return form.pros.length >= 10 && form.cons.length >= 10;
-    return true;
-  };
+    // Retrieve or create a persistent anonymous browser ID
+    const anonId =
+      localStorage.getItem("anonId") ?? crypto.randomUUID();
+    localStorage.setItem("anonId", anonId);
 
-  const submit = async () => {
-    const parsed = schema.safeParse(form);
-    if (!parsed.success || !company) {
-      toast.error("Veuillez remplir tous les champs obligatoires");
+    const parsed = schema.safeParse({
+      ...form,
+      companyId: company.id,
+      anonId,
+    });
+
+    if (!parsed.success) {
+      toast.error("Veuillez compléter tous les champs obligatoires.");
       return;
     }
 
-    const anonId = localStorage.getItem("anonId") || crypto.randomUUID();
-    localStorage.setItem("anonId", anonId);
+    setSubmitting(true);
+    try {
+      await api.createReview(parsed.data);
 
-    await api.createReview({
-      ...parsed.data,
-      companyId: company.id,
-      anonId,
-      // prosTags: selectedPros,
-      // consTags: selectedCons,
-    });
+      // Invalidate relevant React Query caches
+      qc.invalidateQueries({ queryKey: ["company", slug] });
+      qc.invalidateQueries({ queryKey: ["reviews"] });
+      qc.invalidateQueries({ queryKey: ["latest-reviews"] });
 
-    qc.invalidateQueries({ queryKey: ["reviews"] });
-    qc.invalidateQueries({ queryKey: ["companies"] });
-    qc.invalidateQueries({ queryKey: ["latest-reviews"] });
-
-    toast.success("Merci ! Votre avis anonyme est en ligne.");
-    router.push(`/companies/${slug}`);
+      toast.success("Avis envoyé — il sera publié sous 48h après vérification.");
+      router.push(`/companies/${slug}`);
+    } catch {
+      toast.error("Une erreur est survenue. Veuillez réessayer.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  if (!company) {
+  if (isLoading || !company) {
     return (
       <SiteShell>
         <div className="mx-auto max-w-2xl p-10 text-center text-muted-foreground">
@@ -161,309 +544,95 @@ export default function NewReviewPage() {
   return (
     <SiteShell>
       <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+
+        {/* Back link */}
         <Link
           href={`/companies/${slug}`}
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
-          <ArrowLeft size={14} className="mr-1" />
+          <ArrowLeft size={14} />
           Retour à {company.name}
         </Link>
 
-        {/* Progress Bar - Enhanced with second version style */}
-        <div className="mb-8">
-          <div className="flex justify-between mb-3 text-xs font-medium">
-            {STEPS.map((label, i) => (
-              <span
-                key={i}
-                className={cn(
-                  "transition-colors",
-                  i < step ? "text-primary" : i === step ? "text-foreground font-semibold" : "text-muted-foreground"
-                )}
-              >
-                {label}
-              </span>
-            ))}
-          </div>
-          <div className="h-1.5 bg-secondary rounded-full overflow-hidden relative">
-            <div
-              className="absolute inset-y-0 left-0 bg-primary rounded-full transition-all duration-500"
-              style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
-            />
-          </div>
+        {/* Page title */}
+        <div className="mt-6 mb-8">
+          <p className="text-xs font-medium tracking-widest text-primary uppercase mb-1">Avis anonyme</p>
+          <h1 className="font-display text-3xl font-semibold">Partagez votre expérience</h1>
         </div>
 
-        <Card className="p-8">
-          {/* Step 0: Overall Rating + Headline */}
+        {/* Step indicators */}
+        <div className="flex items-center gap-2 mb-8">
+          {STEPS.map((label, i) => (
+            <div key={i} className="flex flex-1 items-center gap-2">
+              <div className={cn(
+                "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold flex-shrink-0",
+                i < step  && "bg-primary text-primary-foreground",
+                i === step && "bg-primary text-primary-foreground ring-4 ring-primary/20",
+                i > step  && "bg-secondary text-muted-foreground"
+              )}>
+                {i < step ? <Check size={13} /> : i + 1}
+              </div>
+              <span className={cn(
+                "text-xs hidden sm:block",
+                i === step ? "text-foreground font-medium" : "text-muted-foreground"
+              )}>
+                {label}
+              </span>
+              {i < STEPS.length - 1 && (
+                <div className={cn(
+                  "h-px flex-1 rounded-full",
+                  i < step ? "bg-primary" : "bg-border"
+                )} />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Card */}
+        <Card className="p-6 sm:p-8">
           {step === 0 && (
-            <div className="space-y-8">
-              <div>
-                <h1 className="text-3xl font-semibold tracking-tight mb-2">
-                  Comment s’est passée votre expérience chez {company.name} ?
-                </h1>
-                <p className="text-muted-foreground">Votre avis est anonyme et aide la communauté.</p>
-              </div>
-
-              <div>
-                <Label className="text-base">Note globale</Label>
-                <div className="flex gap-2 mt-3">
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      onClick={() => updateForm({ rating: n })}
-                      className="transition-transform hover:scale-110"
-                    >
-                      <Star
-                        size={48}
-                        className={n <= form.rating ? "text-yellow-500 fill-yellow-500" : "text-muted-foreground/30"}
-                      />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <Label>Titre de l’avis (headline)</Label>
-                <Input
-                  value={form.title}
-                  onChange={(e) => updateForm({ title: e.target.value })}
-                  placeholder="Ex: Super ambiance mais évolution limitée"
-                  className="mt-2"
-                />
-              </div>
-            </div>
+            <Step0Position data={form} companyName={company.name} update={update} />
           )}
-
-          {/* Step 1: Position Details */}
           {step === 1 && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-semibold mb-1">Parlez-nous de votre poste</h2>
-                <p className="text-sm text-muted-foreground">Ces informations restent anonymes.</p>
-              </div>
-
-              {/* City */}
-              <div>
-                <Label>Ville du poste</Label>
-                <div className="grid grid-cols-3 gap-2 mt-2">
-                  {MOROCCAN_CITIES.map((city) => (
-                    <Button
-                      key={city}
-                      type="button"
-                      variant={form.city === city ? "default" : "outline"}
-                      onClick={() => updateForm({ city })}
-                      className="justify-start"
-                    >
-                      {city}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Other fields using simple selects / inputs for brevity */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Type de contrat</Label>
-                  <select
-                    value={form.jobType}
-                    onChange={(e) => updateForm({ jobType: e.target.value })}
-                    className="w-full mt-1 border rounded-md p-2"
-                  >
-                    <option value="">Sélectionner</option>
-                    <option value="full-time">CDI / CDD</option>
-                    <option value="internship">Stage</option>
-                    <option value="freelance">Freelance</option>
-                    <option value="part-time">Temps partiel</option>
-                  </select>
-                </div>
-
-                <div>
-                  <Label>Séniorité</Label>
-                  <select
-                    value={form.seniority}
-                    onChange={(e) => updateForm({ seniority: e.target.value })}
-                    className="w-full mt-1 border rounded-md p-2"
-                  >
-                    <option value="">Sélectionner</option>
-                    <option value="junior">Junior</option>
-                    <option value="mid">Confirmé</option>
-                    <option value="senior">Senior</option>
-                    <option value="executive">Cadre / Direction</option>
-                  </select>
-                </div>
-
-                <div>
-                  <Label>Durée dans l’entreprise</Label>
-                  <select
-                    value={form.tenure}
-                    onChange={(e) => updateForm({ tenure: e.target.value })}
-                    className="w-full mt-1 border rounded-md p-2"
-                  >
-                    <option value="">Sélectionner</option>
-                    <option value="less-than-1">Moins d’1 an</option>
-                    <option value="1-3">1 – 3 ans</option>
-                    <option value="3-5">3 – 5 ans</option>
-                    <option value="more-than-5">Plus de 5 ans</option>
-                  </select>
-                </div>
-
-                <div>
-                  <Label>Statut actuel</Label>
-                  <select
-                    value={form.employmentStatus}
-                    onChange={(e) => updateForm({ employmentStatus: e.target.value })}
-                    className="w-full mt-1 border rounded-md p-2"
-                  >
-                    <option value="">Sélectionner</option>
-                    <option value="current">Employé(e) actuel(le)</option>
-                    <option value="former">Ancien(ne) employé(e)</option>
-                  </select>
-                </div>
-              </div>
-            </div>
+            <Step1Ratings data={form} update={update} />
           )}
-
-          {/* Step 2: Detailed Ratings */}
           {step === 2 && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-semibold mb-1">Évaluez les aspects clés</h2>
-                <p className="text-sm text-muted-foreground">1 = Très mauvais • 5 = Excellent</p>
-              </div>
-
-              {[
-                { key: "workLife", label: "Équilibre vie pro / perso" },
-                { key: "salary", label: "Équité salariale" },
-                { key: "management", label: "Qualité du management" },
-                { key: "growth", label: "Opportunités de croissance" },
-                { key: "atmosphere", label: "Ambiance au travail" },
-              ].map(({ key, label }) => (
-                <div key={key} className="flex items-center justify-between py-4 border-b last:border-0">
-                  <span className="font-medium">{label}</span>
-                  <div className="flex gap-1">
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <button
-                        key={n}
-                        onClick={() => updateForm({ [key]: n } as any)}
-                      >
-                        <Star
-                          size={28}
-                          className={n <= (form[key as keyof FormData] as number)
-                            ? "text-yellow-500 fill-yellow-500"
-                            : "text-muted-foreground/30"
-                          }
-                        />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <Step2Tags data={form} update={update} />
           )}
-
-          {/* Step 3: Pros & Cons (text + tags) */}
           {step === 3 && (
-            <div className="space-y-8">
-              <div>
-                <Label className="text-base mb-2 block">Points forts (Pros)</Label>
-                <Textarea
-                  value={form.pros}
-                  onChange={(e) => updateForm({ pros: e.target.value })}
-                  placeholder="Décrivez ce que vous avez aimé..."
-                  rows={4}
-                />
-                <div className="mt-4">
-                  <p className="text-sm text-muted-foreground mb-2">Ou sélectionnez des tags :</p>
-                  <div className="flex flex-wrap gap-2">
-                    {PROS_OPTIONS.map((opt) => (
-                      <Button
-                        key={opt.value}
-                        variant={selectedPros.includes(opt.value) ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => {
-                          if (selectedPros.includes(opt.value)) {
-                            setSelectedPros(selectedPros.filter(v => v !== opt.value));
-                          } else if (selectedPros.length < 5) {
-                            setSelectedPros([...selectedPros, opt.value]);
-                          }
-                        }}
-                      >
-                        {opt.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-base mb-2 block">Points faibles (Cons)</Label>
-                <Textarea
-                  value={form.cons}
-                  onChange={(e) => updateForm({ cons: e.target.value })}
-                  placeholder="Décrivez les difficultés rencontrées..."
-                  rows={4}
-                />
-                <div className="mt-4">
-                  <p className="text-sm text-muted-foreground mb-2">Ou sélectionnez des tags :</p>
-                  <div className="flex flex-wrap gap-2">
-                    {CONS_OPTIONS.map((opt) => (
-                      <Button
-                        key={opt.value}
-                        variant={selectedCons.includes(opt.value) ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => {
-                          if (selectedCons.includes(opt.value)) {
-                            setSelectedCons(selectedCons.filter(v => v !== opt.value));
-                          } else if (selectedCons.length < 5) {
-                            setSelectedCons([...selectedCons, opt.value]);
-                          }
-                        }}
-                      >
-                        {opt.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: Advice / Summary */}
-          {step === 4 && (
-            <div className="space-y-6">
-              <div>
-                <Label>Conseil à un futur candidat</Label>
-                <Textarea
-                  value={form.advice}
-                  onChange={(e) => updateForm({ advice: e.target.value })}
-                  placeholder="Que diriez-vous à un ami qui envisage de rejoindre cette entreprise ?"
-                  rows={6}
-                />
-              </div>
-
-              <div className="bg-muted/50 rounded-xl p-6 text-sm">
-                <p className="font-medium mb-2">Votre avis en aperçu</p>
-                <p className="text-muted-foreground line-clamp-3">{form.advice || "Aucun conseil ajouté."}</p>
-              </div>
-            </div>
+            <Step3Summary data={form} companyName={company.name} update={update} />
           )}
 
           {/* Navigation */}
-          <div className="mt-10 flex justify-between items-center">
-            <Button variant="ghost" onClick={back} disabled={step === 0}>
-              ← Retour
+          <div className="flex justify-between items-center mt-8 pt-6 border-t border-border">
+            <Button
+              variant="ghost"
+              onClick={() => setStep((s) => s - 1)}
+              disabled={step === 0}
+            >
+              <ArrowLeft size={14} className="mr-1" />
+              Retour
             </Button>
 
             {step < STEPS.length - 1 ? (
-              <Button onClick={next} disabled={!stepValid()}>
-                Continuer <ArrowRight size={16} className="ml-2" />
+              <Button
+                onClick={() => setStep((s) => s + 1)}
+                disabled={!canProceed()}
+              >
+                Continuer
+                <ArrowRight size={14} className="ml-1" />
               </Button>
             ) : (
-              <Button onClick={submit} size="lg">
-                Publier mon avis anonymement
+              <Button onClick={handleSubmit} disabled={submitting}>
+                {submitting ? "Envoi…" : "Soumettre mon avis"}
               </Button>
             )}
           </div>
         </Card>
+
+        <p className="text-center text-xs text-muted-foreground mt-4">
+          Aucune inscription requise · Totalement anonyme · Vérifié avant publication
+        </p>
       </div>
     </SiteShell>
   );

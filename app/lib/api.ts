@@ -1,3 +1,5 @@
+import { Company } from "@/prisma/generated/prisma";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export const api = {
@@ -5,6 +7,8 @@ export const api = {
     async listCompanies(params?: {
   q?: string;
   industry?: string;
+  page?: number;
+  limit?: number;
 }) {
   const search = new URLSearchParams();
 
@@ -16,8 +20,16 @@ export const api = {
     search.set("industry", params.industry);
   }
 
+  if (params?.page) {
+    search.set("page", params.page.toString());
+  }
+
+  if (params?.limit) {
+    search.set("limit", params.limit.toString());
+  }
+
   const res = await fetch(
-    `${API_URL}/companies?${search.toString()}`
+    `/api/companies?${search.toString()}`
   );
 
   if (!res.ok) {
@@ -28,7 +40,7 @@ export const api = {
 },
 
   async getCompanyBySlug(slug: string) {
-    const res = await fetch(`${API_URL}/companies/${slug}`);
+    const res = await fetch(`/api/companies/${slug}`);
 
     if (!res.ok) {
       throw new Error("Failed to fetch company");
@@ -39,7 +51,7 @@ export const api = {
 
   async listReviews(companyId: string, sort: string) {
     const res = await fetch(
-      `${API_URL}/companies/${companyId}/reviews?sort=${sort}`
+      `/api/companies/${companyId}/reviews?sort=${sort}`
     );
 
     if (!res.ok) {
@@ -49,33 +61,33 @@ export const api = {
     return res.json();
   },
 
-  async createReview(data: {
-    companyId: string;
-    anonId: string;
-
-    title: string;
-    pros: string;
-    cons: string;
-    advice?: string;
-
-    rating: number;
-    workLife: number;
-    salary: number;
-    management: number;
-  }) {
-    const res = await fetch(`${API_URL}/reviews`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-
-      body: JSON.stringify(data),
-    });
-
-    if (!res.ok) {
-      throw new Error("Failed to create review");
-    }
-
-    return res.json();
-  },
+  createReview: (data: {
+    companyId:        string;
+    anonId:           string;
+    role?:            string;
+    jobType:          "FULL_TIME" | "INTERNSHIP" | "FREELANCE" | "PART_TIME";
+    seniority:        "JUNIOR" | "MID" | "SENIOR" | "EXECUTIVE";
+    tenure:           "LESS_THAN_1" | "1_3" | "3_5" | "MORE_THAN_5";
+    employmentStatus: "CURRENT" | "FORMER";
+    city:             string;
+    ratingOverall:    number;
+    ratingWorkLife:   number;
+    ratingSalary:     number;
+    ratingManagement: number;
+    ratingGrowth:     number;
+    ratingAtmosphere: number;
+    pros:             string[];
+    cons:             string[];
+    summary?:         string;
+  }) => Promise<void>
 };
+
+export interface CompanyListResponse {
+  data: Company[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+}

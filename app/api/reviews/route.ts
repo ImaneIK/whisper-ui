@@ -3,6 +3,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { getAnonId } from "../../lib/anon";
+import { JobType, Tenure } from "@/prisma/generated/prisma";
 
 const VALID_PROS = [
   "competitive-salary",
@@ -30,10 +32,10 @@ const ReviewSchema = z.object({
   companyId: z.string().cuid(),
 
   // Layer 1
-  jobType: z.enum(["full-time", "internship", "freelance", "part-time"]),
-  seniority: z.enum(["junior", "mid", "senior", "executive"]),
-  tenure: z.enum(["less-than-1", "1-3", "3-5", "more-than-5"]),
-  employmentStatus: z.enum(["current", "former"]),
+  jobType: z.enum([JobType.FULL_TIME, JobType.INTERNSHIP, JobType.FREELANCE, JobType.PART_TIME]),
+  seniority: z.enum(["JUNIOR", "MID", "SENIOR", "EXECUTIVE"]),
+  tenure: z.enum([Tenure.LESS_THAN_1, Tenure.ONE_TO_3, Tenure.THREE_TO_5, Tenure.MORE_THAN_5]),
+  employmentStatus: z.enum(["CURRENT", "FORMER"]),
   city: z.string().min(2).max(100),
 
   // Layer 2
@@ -86,6 +88,8 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const parsed = ReviewSchema.safeParse(body);
+    const anonId = await getAnonId();
+
 
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -100,10 +104,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
 
+
     const review = await prisma.review.create({
       data: {
         ...parsed.data,
         status: "PENDING",
+        anonId: anonId,
       },
     });
 

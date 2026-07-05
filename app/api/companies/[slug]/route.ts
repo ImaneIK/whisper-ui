@@ -3,15 +3,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/companies/:id
+// GET /api/companies/:slug
 // Returns a single company with all its approved reviews
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: { slug?: string } }
 ) {
   try {
     const company = await prisma.company.findUnique({
-      where: { id: params.id },
+      where: { slug: params.slug, },
       include: {
         reviews: {
           orderBy: { createdAt: "desc" },

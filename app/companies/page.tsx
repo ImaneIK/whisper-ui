@@ -22,6 +22,7 @@ import {
 } from "../components/ui/select";
 
 import type { Industry } from "../lib/mock/types";
+import { Pagination } from "../components/ui/pagination";
 
 const industries: (Industry | "All")[] = [
   "All",
@@ -40,8 +41,10 @@ const searchSchema = z.object({
 });
 
 export default function CompaniesPage() {
+  
   const searchParams = useSearchParams();
   const router = useRouter();
+  const currentPage = Number(searchParams.get("page") ?? "1");
 
   const parsed = searchSchema.parse({
     q: searchParams.get("q") ?? "",
@@ -55,20 +58,34 @@ export default function CompaniesPage() {
       : "All"
   );
 
-  const { data = [], isLoading } = useQuery({
-    queryKey: ["companies", q, industry],
-    queryFn: () => api.listCompanies({ q, industry }),
-  });
+const { data, isLoading } = useQuery({
+queryKey: ["companies", q, industry, currentPage],
+  queryFn: () => api.listCompanies({ q, industry, page: currentPage }),
+});
 
-  const updateQuery = (nextQ: string, nextIndustry: Industry | "All") => {
-    const params = new URLSearchParams();
+const updateQuery = (
+  nextQ: string,
+  nextIndustry: Industry | "All"
+) => {
+  const params = new URLSearchParams(searchParams.toString());
 
-    if (nextQ) params.set("q", nextQ);
-    if (nextIndustry && nextIndustry !== "All")
-      params.set("industry", nextIndustry);
+  if (nextQ) {
+    params.set("q", nextQ);
+  } else {
+    params.delete("q");
+  }
 
-    router.push(`/companies?${params.toString()}`);
-  };
+  if (nextIndustry !== "All") {
+    params.set("industry", nextIndustry);
+  } else {
+    params.delete("industry");
+  }
+
+  // When searching/filtering, go back to page 1
+  params.set("page", "1");
+
+  router.push(`/companies?${params.toString()}`);
+};
 
   return (
     <SiteShell>
@@ -82,8 +99,8 @@ export default function CompaniesPage() {
               </h1>
 
               <p className="mt-2 text-muted-foreground">
-                Search across {data.length} compan
-                {data.length === 1 ? "y" : "ies"} reviewed by former employees.
+                Search across {data?.pagination.total ?? 0} compan
+                {data?.pagination.total === 1 ? "y" : "ies"} reviewed by former employees.
               </p>
             </div>
 
@@ -146,7 +163,7 @@ export default function CompaniesPage() {
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         {isLoading ? (
           <div className="text-muted-foreground">Loading…</div>
-        ) : data.length === 0 ? (
+        ) : (data?.data.length ?? 0) === 0 ? (
           <div className="rounded-2xl border border-dashed p-10 text-center">
             <p className="text-muted-foreground">
               No companies match your search.
@@ -163,7 +180,7 @@ export default function CompaniesPage() {
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {data.map((c: any) => (
+            {data?.data.map((c: any) => (
               <CompanyCard
                 key={c.id}
                 c={c}
@@ -172,6 +189,25 @@ export default function CompaniesPage() {
           </div>
         )}
       </section>
+
+      {/* pagination */}
+      {data?.pagination && (
+        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+         <Pagination
+  page={data?.pagination.page ?? 1}
+  totalPages={data?.pagination.pages ?? 1}
+  totalItems={data?.pagination.total ?? 0}
+  pageSize={data?.pagination.limit ?? 12}
+  onPageChange={(page) => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    params.set("page", page.toString());
+
+    router.push(`/companies?${params.toString()}`);
+  }}
+/>
+        </div>
+      )}
     </SiteShell>
   );
 }

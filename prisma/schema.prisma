@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
   output   = "./generated/prisma"
@@ -7,42 +9,123 @@ datasource db {
   provider = "postgresql"
 }
 
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum JobType {
+  FULL_TIME
+  INTERNSHIP
+  FREELANCE
+  PART_TIME
+}
+
+enum Seniority {
+  JUNIOR
+  MID
+  SENIOR
+  EXECUTIVE
+}
+
+enum Tenure {
+  LESS_THAN_1
+  ONE_TO_3
+  THREE_TO_5
+  MORE_THAN_5
+}
+
+enum EmploymentStatus {
+  CURRENT
+  FORMER
+}
+
+// ─── Company ──────────────────────────────────────────────────────────────────
+
 model Company {
-  id            String    @id @default(cuid())
-  name          String
-  slug          String    @unique
-  description   String?
-  logo          String?
-  website       String?
-  city          String?
-  country       String    @default("Morocco")
-  industry      String?
-  size          String?   // e.g. "50-200", "200-500", "500+"
-  
-  // Ratings cache (for quick display)
-  averageRating Float     @default(0)
-  totalReviews  Int       @default(0)
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  description String?
+  logo        String?
+  website     String?
+  city        String?
+  country     String  @default("Morocco")
+  industry    String?
 
-  // Timestamps
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  // "50-200" | "200-500" | "500+"
+  size        String?
 
-  // Relations
-  reviews       Review[]
+  // Denormalized ratings cache — updated after each review approval
+  // Avoids expensive AVG() on every company list page load
+  averageRating     Float @default(0)
+  averageWorkLife   Float @default(0)
+  averageSalary     Float @default(0)
+  averageManagement Float @default(0)
+  averageGrowth     Float @default(0)
+  averageAtmosphere Float @default(0)
+  totalReviews      Int   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reviews Review[]
 
   @@map("companies")
 }
 
+// ─── Review ───────────────────────────────────────────────────────────────────
 
 model Review {
-  id          String   @id @default(cuid())
-  companyId   String
-  // ... other fields
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String @id @default(cuid())
+  companyId String
 
-  company     Company  @relation(fields: [companyId], references: [id])
-  // other relations...
+  // Anonymous browser fingerprint (localStorage UUID — not PII)
+  anonId String
+
+  // ── Layer 1 · Position ───────────────────────────────────────────────────
+  role             String?          // optional free-text job title
+  jobType          JobType
+  seniority        Seniority
+  tenure           Tenure
+  employmentStatus EmploymentStatus
+  city             String
+
+  // ── Layer 2 · Ratings (1–5) ──────────────────────────────────────────────
+  ratingOverall    Int
+  ratingWorkLife   Int
+  ratingSalary     Int
+  ratingManagement Int
+  ratingGrowth     Int
+  ratingAtmosphere Int
+
+  // ── Layer 3 · Structured tags ────────────────────────────────────────────
+  pros String[] // values from PROS_OPTIONS constant
+  cons String[] // values from CONS_OPTIONS constant
+
+  // ── Layer 4 · Optional summary ───────────────────────────────────────────
+  summary String? // max 300 chars, editable by moderator before approval
+
+  // ── Moderation ───────────────────────────────────────────────────────────
+  status          ReviewStatus @default(PENDING)
+  rejectionReason String?
+  moderatorNote   String?      // internal note, never shown publicly
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  publishedAt DateTime?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // One anonId can only review the same company once
+  @@unique([anonId, companyId])
+
+  // Fast lookups used by the API
+  @@index([companyId, status])
+  @@index([status, createdAt])
+
+  @@map("reviews")
 }
-
